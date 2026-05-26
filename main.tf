@@ -781,12 +781,21 @@ resource "azurerm_application_gateway" "agw_wus2" {
 # ── West US 2 — MySQL Flexible Server (read replica of Canada East) ───────────
 
 resource "azurerm_mysql_flexible_server" "mysql_wus2" {
-  name                = "${var.mysql_server_name_prefix}-wus2"
-  resource_group_name = azurerm_resource_group.rg_wus2.name
-  location            = azurerm_resource_group.rg_wus2.location
-  create_mode         = "Replica"
-  source_server_id    = azurerm_mysql_flexible_server.mysql_cae.id
-  depends_on          = [time_sleep.rg_wus2_ready]
+  name                   = "${var.mysql_server_name_prefix}-wus2"
+  resource_group_name    = azurerm_resource_group.rg_wus2.name
+  location               = azurerm_resource_group.rg_wus2.location
+  administrator_login    = var.db_admin_login
+  administrator_password = var.db_admin_password
+  sku_name               = "B_Standard_B1ms"
+  version                = "8.0.21"
+
+  storage {
+    size_gb = 20
+  }
+
+  backup_retention_days        = 1
+  geo_redundant_backup_enabled = false
+  depends_on                   = [time_sleep.rg_wus2_ready]
 }
 
 resource "azurerm_mysql_flexible_server_firewall_rule" "mysql_wus2_allow_all" {

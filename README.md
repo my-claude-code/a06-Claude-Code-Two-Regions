@@ -38,14 +38,14 @@ Azure Front Door (Standard)
 
 ### Why both app VMs write to Canada East MySQL
 
-Azure MySQL Flexible Server read replicas are **read-only** — the West US 2 replica cannot accept writes. This is Option A (shared primary):
+Azure MySQL Flexible Server managed read replicas require **General Purpose or Business Critical tier** — the Burstable tier (`B_Standard_B1ms`) does not support them. To keep costs low both servers run as independent Burstable instances.
 
 - **Canada East app VM** → writes to Canada East MySQL (local, fast)
 - **West US 2 app VM** → writes to Canada East MySQL (cross-region)
-- **West US 2 MySQL** → read replica, exists for DR only
-- If Canada East fails: promote the replica to standalone, point West US 2 app at it
+- **West US 2 MySQL** → independent standby, same schema, no live replication
+- If Canada East fails: point West US 2 app at its local MySQL and run `flask init-db`
 
-This is a standard active-active web tier / active-passive database tier pattern.
+To enable Azure-managed replication, upgrade both servers to `GP_Standard_D2ds_v4` and add `create_mode = "Replica"` + `source_server_id` to the West US 2 server.
 
 ---
 
@@ -81,7 +81,7 @@ This is a standard active-active web tier / active-passive database tier pattern
 | App VM (Flask/gunicorn) | Flask app, connects to Canada East MySQL |
 | NAT Gateway | Outbound internet for web and app VMs |
 | NSGs (agw, web, app) | All inbound open for testing |
-| MySQL Flexible Server | **Read replica** of Canada East — DR standby |
+| MySQL Flexible Server B1ms | **Independent standby** — same schema, no managed replication |
 
 ---
 

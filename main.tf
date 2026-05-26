@@ -4,14 +4,6 @@ terraform {
       source  = "hashicorp/azurerm"
       version = "~> 3.0"
     }
-    null = {
-      source  = "hashicorp/null"
-      version = "~> 3.0"
-    }
-    local = {
-      source  = "hashicorp/local"
-      version = "~> 2.0"
-    }
     time = {
       source  = "hashicorp/time"
       version = "~> 0.9"
@@ -26,7 +18,6 @@ provider "azurerm" {
 
 locals {
   prefix        = "flask-notes"
-  cert_password = "terraform"
   db_name       = "flask_notes"
 
   mysql_cae_fqdn  = "${var.mysql_server_name_prefix}-cae.mysql.database.azure.com"
@@ -215,27 +206,6 @@ resource "azurerm_public_ip" "agw_cae" {
   depends_on          = [time_sleep.rg_cae_ready]
 }
 
-resource "null_resource" "agw_cert_cae" {
-  triggers = { fqdn = local.agw_fqdn_cae }
-  provisioner "local-exec" {
-    interpreter = ["PowerShell", "-Command"]
-    command     = <<-EOT
-      $cert = New-SelfSignedCertificate `
-        -DnsName "${local.agw_fqdn_cae}" `
-        -CertStoreLocation "Cert:\CurrentUser\My" `
-        -KeyExportPolicy Exportable `
-        -NotAfter (Get-Date).AddDays(365)
-      $pwd = ConvertTo-SecureString -String "${local.cert_password}" -Force -AsPlainText
-      Export-PfxCertificate -Cert $cert -FilePath "${path.module}/agw-cae.pfx" -Password $pwd | Out-Null
-    EOT
-  }
-}
-
-data "local_file" "agw_pfx_cae" {
-  filename   = "${path.module}/agw-cae.pfx"
-  depends_on = [null_resource.agw_cert_cae]
-}
-
 resource "azurerm_application_gateway" "agw_cae" {
   name                = "agw-${local.prefix}-cae"
   resource_group_name = azurerm_resource_group.rg_cae.name
@@ -247,20 +217,11 @@ resource "azurerm_application_gateway" "agw_cae" {
     capacity = 1
   }
 
-  ssl_policy {
-    policy_type = "Predefined"
-    policy_name = "AppGwSslPolicy20220101"
-  }
-
   gateway_ip_configuration {
     name      = "agw-ip-config"
     subnet_id = azurerm_subnet.agw_cae.id
   }
 
-  frontend_port {
-    name = "port-443"
-    port = 443
-  }
   frontend_port {
     name = "port-80"
     port = 80
@@ -269,12 +230,6 @@ resource "azurerm_application_gateway" "agw_cae" {
   frontend_ip_configuration {
     name                 = "agw-frontend-ip"
     public_ip_address_id = azurerm_public_ip.agw_cae.id
-  }
-
-  ssl_certificate {
-    name     = "self-signed"
-    data     = data.local_file.agw_pfx_cae.content_base64
-    password = local.cert_password
   }
 
   backend_address_pool { name = "web-backend-pool" }
@@ -300,14 +255,6 @@ resource "azurerm_application_gateway" "agw_cae" {
   }
 
   http_listener {
-    name                           = "https-listener"
-    frontend_ip_configuration_name = "agw-frontend-ip"
-    frontend_port_name             = "port-443"
-    protocol                       = "Https"
-    ssl_certificate_name           = "self-signed"
-  }
-
-  http_listener {
     name                           = "http-listener"
     frontend_ip_configuration_name = "agw-frontend-ip"
     frontend_port_name             = "port-80"
@@ -315,25 +262,13 @@ resource "azurerm_application_gateway" "agw_cae" {
   }
 
   request_routing_rule {
-    name                       = "https-rule"
-    rule_type                  = "Basic"
-    http_listener_name         = "https-listener"
-    backend_address_pool_name  = "web-backend-pool"
-    backend_http_settings_name = "http-settings"
-    priority                   = 10
-  }
-
-  # Front Door connects on HTTP — serve backend directly, no redirect
-  request_routing_rule {
     name                       = "http-rule"
     rule_type                  = "Basic"
     http_listener_name         = "http-listener"
     backend_address_pool_name  = "web-backend-pool"
     backend_http_settings_name = "http-settings"
-    priority                   = 20
+    priority                   = 10
   }
-
-  depends_on = [null_resource.agw_cert_cae]
 }
 
 # ── Canada East — MySQL Flexible Server (primary) ────────────────────────────
@@ -645,27 +580,6 @@ resource "azurerm_public_ip" "agw_wus2" {
   depends_on          = [time_sleep.rg_wus2_ready]
 }
 
-resource "null_resource" "agw_cert_wus2" {
-  triggers = { fqdn = local.agw_fqdn_wus2 }
-  provisioner "local-exec" {
-    interpreter = ["PowerShell", "-Command"]
-    command     = <<-EOT
-      $cert = New-SelfSignedCertificate `
-        -DnsName "${local.agw_fqdn_wus2}" `
-        -CertStoreLocation "Cert:\CurrentUser\My" `
-        -KeyExportPolicy Exportable `
-        -NotAfter (Get-Date).AddDays(365)
-      $pwd = ConvertTo-SecureString -String "${local.cert_password}" -Force -AsPlainText
-      Export-PfxCertificate -Cert $cert -FilePath "${path.module}/agw-wus2.pfx" -Password $pwd | Out-Null
-    EOT
-  }
-}
-
-data "local_file" "agw_pfx_wus2" {
-  filename   = "${path.module}/agw-wus2.pfx"
-  depends_on = [null_resource.agw_cert_wus2]
-}
-
 resource "azurerm_application_gateway" "agw_wus2" {
   name                = "agw-${local.prefix}-wus2"
   resource_group_name = azurerm_resource_group.rg_wus2.name
@@ -677,20 +591,11 @@ resource "azurerm_application_gateway" "agw_wus2" {
     capacity = 1
   }
 
-  ssl_policy {
-    policy_type = "Predefined"
-    policy_name = "AppGwSslPolicy20220101"
-  }
-
   gateway_ip_configuration {
     name      = "agw-ip-config"
     subnet_id = azurerm_subnet.agw_wus2.id
   }
 
-  frontend_port {
-    name = "port-443"
-    port = 443
-  }
   frontend_port {
     name = "port-80"
     port = 80
@@ -699,12 +604,6 @@ resource "azurerm_application_gateway" "agw_wus2" {
   frontend_ip_configuration {
     name                 = "agw-frontend-ip"
     public_ip_address_id = azurerm_public_ip.agw_wus2.id
-  }
-
-  ssl_certificate {
-    name     = "self-signed"
-    data     = data.local_file.agw_pfx_wus2.content_base64
-    password = local.cert_password
   }
 
   backend_address_pool { name = "web-backend-pool" }
@@ -730,14 +629,6 @@ resource "azurerm_application_gateway" "agw_wus2" {
   }
 
   http_listener {
-    name                           = "https-listener"
-    frontend_ip_configuration_name = "agw-frontend-ip"
-    frontend_port_name             = "port-443"
-    protocol                       = "Https"
-    ssl_certificate_name           = "self-signed"
-  }
-
-  http_listener {
     name                           = "http-listener"
     frontend_ip_configuration_name = "agw-frontend-ip"
     frontend_port_name             = "port-80"
@@ -745,25 +636,13 @@ resource "azurerm_application_gateway" "agw_wus2" {
   }
 
   request_routing_rule {
-    name                       = "https-rule"
-    rule_type                  = "Basic"
-    http_listener_name         = "https-listener"
-    backend_address_pool_name  = "web-backend-pool"
-    backend_http_settings_name = "http-settings"
-    priority                   = 10
-  }
-
-  # Front Door connects on HTTP — serve backend directly, no redirect
-  request_routing_rule {
     name                       = "http-rule"
     rule_type                  = "Basic"
     http_listener_name         = "http-listener"
     backend_address_pool_name  = "web-backend-pool"
     backend_http_settings_name = "http-settings"
-    priority                   = 20
+    priority                   = 10
   }
-
-  depends_on = [null_resource.agw_cert_wus2]
 }
 
 # ── West US 2 — MySQL Flexible Server (read replica of Canada East) ───────────

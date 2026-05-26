@@ -1,6 +1,18 @@
 # a06 — Two-Region Active-Active Flask Notes App
 
-Flask notes app deployed across two Azure regions with Azure Front Door load balancing and MySQL Flexible Server replication.
+## What this is
+
+This project deploys the Flask notes app across two Azure regions (Canada East and West US 2) behind Azure Front Door, giving you an active-active setup where both regions serve live traffic simultaneously. If one region goes down, Front Door automatically stops routing to it and the other region continues serving users without any manual intervention.
+
+## How it works in depth
+
+The deployment is split into three layers. At the top, Azure Front Door Standard acts as the global entry point — it terminates HTTPS for the user, load balances 50/50 between both regions, and runs health probes every 100 seconds to detect failures. Front Door connects to the origin Application Gateways using plain HTTP (port 80); this avoids self-signed certificate trust issues since Front Door handles TLS for the user.
+
+In each region, an Application Gateway (Standard_v2) receives traffic from Front Door on port 80 and forwards it to the Web VM where nginx runs as a reverse proxy. Nginx proxies the request to the App VM on port 5000 where gunicorn serves the Flask application. The App VM's private IP is injected into the nginx config at boot via Terraform's `templatefile`. Both web and app VMs get outbound internet access through a NAT Gateway (needed for `apt-get` and `git clone` during cloud-init setup).
+
+At the database layer, both regions run a MySQL Flexible Server (Burstable B1ms). Both app VMs — regardless of which region they are in — write to the Canada East MySQL primary. The West US 2 MySQL is an independent standby. Azure MySQL Flexible Server read replicas require General Purpose tier minimum; Burstable tier does not support managed replication. To promote the West US 2 MySQL to primary for DR, you update the app VM's `.env` and restart gunicorn.
+
+The Terraform deployment uses `time_sleep` resources (30 seconds after resource group creation, 30 seconds after VNet creation) to work around Azure ARM API propagation delays that cause transient 404 errors when resources are created too quickly in parallel.
 
 ---
 
@@ -13,7 +25,7 @@ Internet (HTTPS)
 Azure Front Door (Standard)
   flask-notes-ivansto.azurefd.net
       │
-      ├─── 50% ───▶ Application Gateway (Canada East, HTTPS)
+      ├─── 50% ───▶ Application Gateway (Canada East, HTTP)
       │                    │
       │              Web VM — nginx (Canada East)
       │                    │
@@ -23,7 +35,7 @@ Azure Front Door (Standard)
       │             MySQL Flexible Server ◀─── PRIMARY (read/write)
       │             Canada East              │
       │                                      │ replication
-      └─── 50% ───▶ Application Gateway (West US 2, HTTPS)
+      └─── 50% ───▶ Application Gateway (West US 2, HTTP)
                           │
                     Web VM — nginx (West US 2)
                           │

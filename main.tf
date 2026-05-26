@@ -257,8 +257,14 @@ resource "azurerm_application_gateway" "agw_cae" {
     subnet_id = azurerm_subnet.agw_cae.id
   }
 
-  frontend_port { name = "port-443"; port = 443 }
-  frontend_port { name = "port-80";  port = 80  }
+  frontend_port {
+    name = "port-443"
+    port = 443
+  }
+  frontend_port {
+    name = "port-80"
+    port = 80
+  }
 
   frontend_ip_configuration {
     name                 = "agw-frontend-ip"
@@ -687,8 +693,14 @@ resource "azurerm_application_gateway" "agw_wus2" {
     subnet_id = azurerm_subnet.agw_wus2.id
   }
 
-  frontend_port { name = "port-443"; port = 443 }
-  frontend_port { name = "port-80";  port = 80  }
+  frontend_port {
+    name = "port-443"
+    port = 443
+  }
+  frontend_port {
+    name = "port-80"
+    port = 80
+  }
 
   frontend_ip_configuration {
     name                 = "agw-frontend-ip"

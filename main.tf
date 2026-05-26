@@ -314,14 +314,6 @@ resource "azurerm_application_gateway" "agw_cae" {
     protocol                       = "Http"
   }
 
-  redirect_configuration {
-    name                 = "http-to-https"
-    redirect_type        = "Permanent"
-    target_listener_name = "https-listener"
-    include_path         = true
-    include_query_string = true
-  }
-
   request_routing_rule {
     name                       = "https-rule"
     rule_type                  = "Basic"
@@ -331,12 +323,14 @@ resource "azurerm_application_gateway" "agw_cae" {
     priority                   = 10
   }
 
+  # Front Door connects on HTTP — serve backend directly, no redirect
   request_routing_rule {
-    name                        = "http-redirect-rule"
-    rule_type                   = "Basic"
-    http_listener_name          = "http-listener"
-    redirect_configuration_name = "http-to-https"
-    priority                    = 20
+    name                       = "http-rule"
+    rule_type                  = "Basic"
+    http_listener_name         = "http-listener"
+    backend_address_pool_name  = "web-backend-pool"
+    backend_http_settings_name = "http-settings"
+    priority                   = 20
   }
 
   depends_on = [null_resource.agw_cert_cae]
@@ -750,14 +744,6 @@ resource "azurerm_application_gateway" "agw_wus2" {
     protocol                       = "Http"
   }
 
-  redirect_configuration {
-    name                 = "http-to-https"
-    redirect_type        = "Permanent"
-    target_listener_name = "https-listener"
-    include_path         = true
-    include_query_string = true
-  }
-
   request_routing_rule {
     name                       = "https-rule"
     rule_type                  = "Basic"
@@ -767,12 +753,14 @@ resource "azurerm_application_gateway" "agw_wus2" {
     priority                   = 10
   }
 
+  # Front Door connects on HTTP — serve backend directly, no redirect
   request_routing_rule {
-    name                        = "http-redirect-rule"
-    rule_type                   = "Basic"
-    http_listener_name          = "http-listener"
-    redirect_configuration_name = "http-to-https"
-    priority                    = 20
+    name                       = "http-rule"
+    rule_type                  = "Basic"
+    http_listener_name         = "http-listener"
+    backend_address_pool_name  = "web-backend-pool"
+    backend_http_settings_name = "http-settings"
+    priority                   = 20
   }
 
   depends_on = [null_resource.agw_cert_wus2]
@@ -932,7 +920,7 @@ resource "azurerm_cdn_frontdoor_origin_group" "fd" {
 
   health_probe {
     path                = "/"
-    protocol            = "Https"
+    protocol            = "Http"
     request_type        = "GET"
     interval_in_seconds = 100
   }
@@ -972,7 +960,7 @@ resource "azurerm_cdn_frontdoor_route" "fd" {
 
   supported_protocols    = ["Http", "Https"]
   patterns_to_match      = ["/*"]
-  forwarding_protocol    = "HttpsOnly"
+  forwarding_protocol    = "HttpOnly"
   https_redirect_enabled = true
   link_to_default_domain = true
 }
